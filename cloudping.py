@@ -11,9 +11,12 @@ uses.
 import sys
 import getopt
 import logging
+import socket
 import socketserver
+import struct
+import time
 
-# TODO - use socketserver framework to make connections.
+# use socketserver framework to make connections.
 # https://docs.python.org/3/library/socketserver.html
 
 # GetOpt - http://www.diveintopython.net/scripts_and_streams/command_line_arguments.html
@@ -21,6 +24,8 @@ import socketserver
 
 SERVER_MODE = "server"
 CLIENT_MODE = "client"
+
+msgStruct = struct.Struct("!Hd")
 
 class InvalidInvocation(ValueError):
     pass
@@ -30,8 +35,8 @@ class InvalidMode(ValueError):
 
 class ServerRequestHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        self.data = self.request.recv(1024).strip()
-        print("received: ({}), from {}".format(self.data, self.client_address[0]))
+        self.data = recvall(self.request, msgStruct.size)
+        print("received ping: {} bytes, from {}".format(len(self.data), self.client_address[0]))
         self.request.sendall(self.data)
 
 class CloudPing():
@@ -83,6 +88,33 @@ class CloudPing():
         server = socketserver.TCPServer((self.addr, self.port), ServerRequestHandler)
         server.serve_forever()
 
+    def ping(self):
+        if self.mode != CLIENT_MODE:
+            raise InvalidMode("ping() method can only be called in client mode")
+
+        # connect to server
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            # Connect to server and send data
+            sock.connect((self.addr, self.port))
+            # send ping msg
+            msg = msgStruct.pack(0xFEED, time.time())
+            sock.sendall(msg)
+            # recv reply
+            reply = recvall(sock, msgStruct.size)
+            hdr, begin_time = msgStruct.unpack(reply)
+            assert hdr == 0xFEED
+            elapsed_time = time.time() - begin_time
+            return elapsed_time
+
+def recvall(sock, count):
+    buf = b''
+    while count:
+        newbuf = sock.recv(count)
+        if not newbuf:
+            raise socket.error("connection disconnected")
+        buf += newbuf
+        count -= len(newbuf)
+    return buf
 
 def main(argv):
     logging.basicConfig(level=logging.INFO)
@@ -91,8 +123,11 @@ def main(argv):
         if cloudping.mode == SERVER_MODE:
             cloudping.listen()
         elif cloudping.mode == CLIENT_MODE:
-            # TODO - implement client side
-            pass
+            # loop pinging the server
+            while True:
+                elapsed_time = cloudping.ping()
+                print("Ping {} RTT: {:.2f} ms".format(cloudping.addr, elapsed_time * 1000))
+                time.sleep(1)
     except ValueError as err:
         logging.error(repr(err))
         cloudping.printUsage()
