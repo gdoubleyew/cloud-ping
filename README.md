@@ -8,4 +8,4 @@ Start the server listening for ping requests
 
 ## Client
 Start client to send pings to server and measure round-trip time
-> python cloud-ping.py -c --addr [server-addr] --port [server-port]
+> python cloud-ping.py -c --addr [remote-addr] --port [remote-port]
