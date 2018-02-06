@@ -43,7 +43,7 @@ class CloudPing():
     def __init__(self, argv):
         self.argv = argv
         self.mode = SERVER_MODE
-        self.addr = "127.0.0.1"
+        self.addr = ''
         self.port = 5500
         self.parseArgs()
 
